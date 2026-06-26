@@ -275,11 +275,11 @@ const ActivityHistory = ({ triggerFetch }: { triggerFetch: number }) => {
     const { error } = await supabase
       .from('activity_log')
       .delete()
-      .neq('id', 0); // Delete all rows
+      .not('id', 'is', null); // Delete all rows safely
 
     if (error) {
       console.error('Error clearing history:', error);
-      alert('Hubo un error al eliminar el historial.');
+      alert(`Hubo un error al eliminar el historial: ${error.message || 'Desconocido'}`);
     } else {
       alert('Historial eliminado correctamente.');
       fetchHistory();
