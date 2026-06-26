@@ -66,7 +66,7 @@ const SummaryCards = ({ stats }: { stats: DashboardStats }) => (
 
 const AssignmentSection = ({ onAssigned }: { onAssigned: () => void }) => {
   const [personnel, setPersonnel] = useState<any[]>([]);
-  const [selectedPersonId, setSelectedPersonId] = useState<string>('');
+  const [selectedPersonName, setSelectedPersonName] = useState<string>('');
   const [availableModems, setAvailableModems] = useState<any[]>([]);
   const [selectedModems, setSelectedModems] = useState<any[]>([]);
   const [modemSearch, setModemSearch] = useState('');
@@ -92,13 +92,16 @@ const AssignmentSection = ({ onAssigned }: { onAssigned: () => void }) => {
   };
 
   const handleProcessAssignment = async () => {
-    if (selectedModems.length === 0 || !selectedPersonId) {
+    if (selectedModems.length === 0 || !selectedPersonName) {
       alert('Por favor, selecciona un colaborador y al menos un módem.');
       return;
     }
 
-    const person = personnel.find(p => p.id === selectedPersonId);
-    if (!person) return;
+    const person = personnel.find(p => p.name === selectedPersonName);
+    if (!person) {
+      alert('El colaborador ingresado no existe. Por favor, selecciona uno de la lista.');
+      return;
+    }
 
     setIsProcessing(true);
     
@@ -134,7 +137,7 @@ const AssignmentSection = ({ onAssigned }: { onAssigned: () => void }) => {
 
     alert(`¡Asignación exitosa de ${selectedModems.length} equipos!`);
     setSelectedModems([]);
-    setSelectedPersonId('');
+    setSelectedPersonName('');
     fetchAvailableModems();
     onAssigned();
     setIsProcessing(false);
@@ -174,16 +177,19 @@ const AssignmentSection = ({ onAssigned }: { onAssigned: () => void }) => {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-lg)' }}>
           <div className="form-group">
             <label className="text-caption form-label">Seleccione a quien asignar</label>
-            <select 
-              className="select-input text-body-md" 
-              value={selectedPersonId}
-              onChange={(e) => setSelectedPersonId(e.target.value)}
-            >
-              <option value="">-- Seleccionar Colaborador --</option>
+            <input 
+              list="personnel-list"
+              className="text-input text-body-md" 
+              value={selectedPersonName}
+              onChange={(e) => setSelectedPersonName(e.target.value)}
+              placeholder="-- Escriba o seleccione un colaborador --"
+              style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--color-outline)' }}
+            />
+            <datalist id="personnel-list">
               {personnel.map(p => (
-                <option key={p.id} value={p.id}>{p.name} ({p.zone})</option>
+                <option key={p.id} value={p.name}>{p.zone}</option>
               ))}
-            </select>
+            </datalist>
           </div>
           
           <div className="form-group">
