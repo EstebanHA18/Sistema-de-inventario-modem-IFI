@@ -121,16 +121,16 @@ const Inventory: React.FC<InventoryProps> = ({ searchTerm = '' }) => {
         return;
       }
 
-      // Insert or upsert to Supabase
+      // Insert or upsert to Supabase with ignoreDuplicates to preserve assignments
       const { error } = await supabase
         .from('inventory')
-        .upsert(uniqueData, { onConflict: 'imei' });
+        .upsert(uniqueData, { onConflict: 'imei', ignoreDuplicates: true });
 
       if (error) {
         console.error('Supabase upload error:', error);
         alert(`Error de Supabase: ${error.message || JSON.stringify(error)}`);
       } else {
-        alert(`Lote importado correctamente (${uniqueData.length} equipos).`);
+        alert(`Lote procesado. Los equipos nuevos han sido agregados y los duplicados fueron ignorados para mantener sus asignaciones y estados intactos.`);
         fetchInventory(); // Refrescar la tabla
       }
 
