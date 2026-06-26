@@ -40,6 +40,7 @@ const Inventory: React.FC<InventoryProps> = ({ searchTerm = '' }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [statusFilter, setStatusFilter] = useState('Todos');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchInventory = async () => {
@@ -187,6 +188,119 @@ const Inventory: React.FC<InventoryProps> = ({ searchTerm = '' }) => {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`¿Estás seguro de que deseas eliminar los ${selectedIds.length} módems seleccionados? Esta acción no se puede deshacer.`)) return;
+
+    const { error } = await supabase
+      .from('inventory')
+      .delete()
+      .in('id', selectedIds);
+
+    if (error) {
+      console.error('Error bulk deleting:', error);
+      alert('Hubo un error al eliminar los equipos.');
+    } else {
+      setSelectedIds([]);
+      fetchInventory();
+    }
+  };
+
+  const handleBulkMarkAsPaid = async () => {
+    if (selectedIds.length === 0) return;
+    
+    // Filter only those that are assigned and not cancelled
+    const itemsToPay = inventoryData.filter(i => selectedIds.includes(i.id as string));
+    const validItems = itemsToPay.filter(item => {
+      const isStock = item.status === 'En Almacén' || item.status === 'En Stock' || item.assignment?.toUpperCase() === 'GUADALUPE GARCIA';
+      const displayStatus = isStock ? 'En Stock' : item.status;
+      const isAssigned = displayStatus === 'Asignado' || (!isStock && displayStatus !== 'Devuelto');
+      return isAssigned && item.payment_status !== 'Cancelado';
+    });
+
+    if (validItems.length === 0) {
+      alert('Ninguno de los equipos seleccionados es válido para marcar como pagado (deben estar asignados y pendientes).');
+      return;
+    }
+
+    if (!window.confirm(`¿Confirmar el pago para los ${validItems.length} equipos válidos seleccionados?`)) return;
+
+    const validIds = validItems.map(i => i.id as string);
+
+    const { error } = await supabase
+      .from('inventory')
+      .update({ payment_status: 'Cancelado' })
+      .in('id', validIds);
+
+    if (error) {
+      console.error('Error bulk updating payments:', error);
+      alert('Error al registrar los pagos.');
+    } else {
+      const logs = validItems.map(item => ({
+        action_type: 'Pago Cancelado',
+        serial_number: item.imei,
+        personnel_name: item.assignment || 'Desconocido',
+        details: 'Pago registrado desde el Inventario (Múltiple)'
+      }));
+      await supabase.from('activity_log').insert(logs);
+      alert(`Pago registrado exitosamente para ${validIds.length} equipos.`);
+      
+      // Keep only those not processed if we wanted, but typically we clear selection
+      setSelectedIds([]);
+      fetchInventory();
+      window.dispatchEvent(new Event('inventory-updated'));
+    }
+  };
+
+  const toggleSelection = (id: string) => {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleAll = (visibleItems: InventoryItem[]) => {
+    const visibleIds = visibleItems.map(i => i.id as string);
+    const allSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.includes(id));
+    
+    if (allSelected) {
+      // Unselect all visible
+      setSelectedIds(prev => prev.filter(id => !visibleIds.includes(id)));
+    } else {
+      // Select all visible
+      setSelectedIds(prev => Array.from(new Set([...prev, ...visibleIds])));
+    }
+  };
+
+  // Derive visible items for Select All logic
+  const visibleItems = inventoryData.filter(item => {
+    const term = searchTerm.toLowerCase();
+    let matchesSearch = true;
+    if (term) {
+      matchesSearch = (
+        item.imei?.toLowerCase().includes(term) ||
+        item.iccid?.toLowerCase().includes(term) ||
+        item.brand?.toLowerCase().includes(term) ||
+        item.assignment?.toLowerCase().includes(term) ||
+        item.status?.toLowerCase().includes(term)
+      ) ?? false;
+    }
+    
+    if (!matchesSearch) return false;
+    if (statusFilter === 'Todos') return true;
+
+    const isStock = item.status === 'En Almacén' || item.status === 'En Stock' || item.assignment?.toUpperCase() === 'GUADALUPE GARCIA';
+    const displayStatus = isStock ? 'En Stock' : item.status;
+    const isAssigned = displayStatus === 'Asignado' || (!isStock && displayStatus !== 'Devuelto');
+    const displayPaymentStatus = item.payment_status === 'Cancelado' ? 'Cancelado' : (isAssigned ? 'Pendiente' : 'N/A');
+
+    if (statusFilter === 'Cancelado') return displayPaymentStatus === 'Cancelado';
+    if (statusFilter === 'Pendiente') return displayPaymentStatus === 'Pendiente';
+    if (statusFilter === 'En Stock') return displayStatus === 'En Stock';
+    if (statusFilter === 'Asignado') return isAssigned;
+
+    return true;
+  });
+
   return (
     <div className="inventory-page">
       <div className="page-header">
@@ -239,10 +353,53 @@ const Inventory: React.FC<InventoryProps> = ({ searchTerm = '' }) => {
         </div>
       </div>
 
+      {selectedIds.length > 0 && (
+        <div style={{
+          backgroundColor: 'var(--color-surface-variant)', 
+          padding: '12px 24px', 
+          borderRadius: '8px', 
+          marginBottom: 'var(--space-md)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          border: '1px solid var(--color-outline)'
+        }}>
+          <span className="text-body-md" style={{ fontWeight: 'bold' }}>
+            {selectedIds.length} equipos seleccionados
+          </span>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button 
+              className="btn-secondary interactive-element" 
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-tertiary-fixed-dim)', borderColor: 'var(--color-tertiary-fixed-dim)' }}
+              onClick={handleBulkMarkAsPaid}
+            >
+              <CheckCircle size={18} />
+              Marcar como Pagados
+            </button>
+            <button 
+              className="btn-secondary interactive-element" 
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-error)', borderColor: 'var(--color-error)' }}
+              onClick={handleBulkDelete}
+            >
+              <Trash2 size={18} />
+              Eliminar Seleccionados
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="inventory-table-container">
         <table className="inventory-table">
           <thead>
             <tr>
+              <th style={{ width: '40px', textAlign: 'center' }}>
+                <input 
+                  type="checkbox" 
+                  checked={visibleItems.length > 0 && visibleItems.every(i => selectedIds.includes(i.id as string))}
+                  onChange={() => toggleAll(visibleItems)}
+                  style={{ cursor: 'pointer' }}
+                />
+              </th>
               <th>IMEI (Serial)</th>
               <th>ICCID</th>
               <th>Modelo / Marca</th>
@@ -255,36 +412,7 @@ const Inventory: React.FC<InventoryProps> = ({ searchTerm = '' }) => {
             </tr>
           </thead>
           <tbody>
-            {!isLoading && inventoryData
-              .filter(item => {
-                const term = searchTerm.toLowerCase();
-                let matchesSearch = true;
-                if (term) {
-                  matchesSearch = (
-                    item.imei?.toLowerCase().includes(term) ||
-                    item.iccid?.toLowerCase().includes(term) ||
-                    item.brand?.toLowerCase().includes(term) ||
-                    item.assignment?.toLowerCase().includes(term) ||
-                    item.status?.toLowerCase().includes(term)
-                  ) ?? false;
-                }
-                
-                if (!matchesSearch) return false;
-                if (statusFilter === 'Todos') return true;
-
-                const isStock = item.status === 'En Almacén' || item.status === 'En Stock' || item.assignment?.toUpperCase() === 'GUADALUPE GARCIA';
-                const displayStatus = isStock ? 'En Stock' : item.status;
-                const isAssigned = displayStatus === 'Asignado' || (!isStock && displayStatus !== 'Devuelto');
-                const displayPaymentStatus = item.payment_status === 'Cancelado' ? 'Cancelado' : (isAssigned ? 'Pendiente' : 'N/A');
-
-                if (statusFilter === 'Cancelado') return displayPaymentStatus === 'Cancelado';
-                if (statusFilter === 'Pendiente') return displayPaymentStatus === 'Pendiente';
-                if (statusFilter === 'En Stock') return displayStatus === 'En Stock';
-                if (statusFilter === 'Asignado') return isAssigned;
-
-                return true;
-              })
-              .map((item, index) => {
+            {!isLoading && visibleItems.map((item, index) => {
               const isStock = item.status === 'En Almacén' || item.status === 'En Stock' || item.assignment?.toUpperCase() === 'GUADALUPE GARCIA';
               const displayStatus = isStock ? 'En Stock' : item.status;
               const displayAssignment = (item.assignment?.toUpperCase() === 'GUADALUPE GARCIA') ? null : item.assignment;
@@ -294,7 +422,15 @@ const Inventory: React.FC<InventoryProps> = ({ searchTerm = '' }) => {
               const displayPaymentStatus = item.payment_status === 'Cancelado' ? 'Cancelado' : (isAssigned ? 'Pendiente' : 'N/A');
 
               return (
-                <tr key={item.id || index}>
+                <tr key={item.id || index} className={selectedIds.includes(item.id as string) ? 'selected-row' : ''}>
+                  <td style={{ textAlign: 'center' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={selectedIds.includes(item.id as string)}
+                      onChange={() => toggleSelection(item.id as string)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                  </td>
                   <td className="text-label-mono" style={{ fontWeight: 'bold' }}>{item.imei}</td>
                   <td className="text-label-mono" style={{ fontSize: '11px', color: 'var(--color-on-surface-variant)' }}>{item.iccid || 'N/A'}</td>
                   <td className="text-body-md" style={{ color: 'var(--color-on-surface)' }}>{item.brand}</td>
@@ -347,7 +483,7 @@ const Inventory: React.FC<InventoryProps> = ({ searchTerm = '' }) => {
             
             {!isLoading && inventoryData.length === 0 && (
               <tr>
-                <td colSpan={9} style={{ textAlign: 'center', padding: 'var(--space-xl)' }}>
+                <td colSpan={10} style={{ textAlign: 'center', padding: 'var(--space-xl)' }}>
                   <Box size={48} style={{ margin: '0 auto var(--space-md)', opacity: 0.5, color: 'var(--color-on-surface-variant)' }} />
                   <p className="text-body-lg" style={{ color: 'var(--color-on-surface-variant)' }}>No hay equipos en el inventario.</p>
                 </td>
@@ -356,7 +492,7 @@ const Inventory: React.FC<InventoryProps> = ({ searchTerm = '' }) => {
             
             {isLoading && (
               <tr>
-                <td colSpan={9} style={{ textAlign: 'center', padding: 'var(--space-xl)' }}>
+                <td colSpan={10} style={{ textAlign: 'center', padding: 'var(--space-xl)' }}>
                   <RefreshCw size={32} className="spinning" style={{ margin: '0 auto var(--space-md)', color: 'var(--color-primary)' }} />
                   <p className="text-body-lg">Cargando inventario desde Supabase...</p>
                 </td>
