@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Package, UserPlus, AlertCircle, 
-  ClipboardCheck, Search, History, DollarSign
+  ClipboardCheck, Search, History, DollarSign, Trash2
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import './Dashboard.css';
@@ -269,6 +269,23 @@ const ActivityHistory = ({ triggerFetch }: { triggerFetch: number }) => {
     return date.toLocaleString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
   };
 
+  const handleClearHistory = async () => {
+    if (!window.confirm('¿Estás seguro de que deseas eliminar todo el historial de actividad? Esta acción no se puede deshacer.')) return;
+
+    const { error } = await supabase
+      .from('activity_log')
+      .delete()
+      .neq('id', 0); // Delete all rows
+
+    if (error) {
+      console.error('Error clearing history:', error);
+      alert('Hubo un error al eliminar el historial.');
+    } else {
+      alert('Historial eliminado correctamente.');
+      fetchHistory();
+    }
+  };
+
   const getDotClass = (action: string) => {
     if (action.includes('Asignación')) return 'dot-assigned';
     if (action.includes('Cancelado')) return 'dot-stock'; // green
@@ -293,16 +310,27 @@ const ActivityHistory = ({ triggerFetch }: { triggerFetch: number }) => {
           <History size={24} />
           <h3 className="text-headline-md">Historial de Actividad Reciente</h3>
         </div>
-        <div className="input-wrapper" style={{ width: '250px' }}>
-          <Search className="input-icon" size={16} />
-          <input 
-            type="text" 
-            className="text-input with-icon text-caption" 
-            placeholder="Filtrar historial..." 
-            value={historySearch}
-            onChange={(e) => setHistorySearch(e.target.value)}
-            style={{ padding: '6px 12px 6px 36px' }}
-          />
+        <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+          <div className="input-wrapper" style={{ width: '250px' }}>
+            <Search className="input-icon" size={16} />
+            <input 
+              type="text" 
+              className="text-input with-icon text-caption" 
+              placeholder="Filtrar historial..." 
+              value={historySearch}
+              onChange={(e) => setHistorySearch(e.target.value)}
+              style={{ padding: '6px 12px 6px 36px' }}
+            />
+          </div>
+          <button 
+            className="btn-secondary interactive-element flex-center" 
+            style={{ gap: '8px', color: 'var(--color-error)', borderColor: 'var(--color-error)' }}
+            onClick={handleClearHistory}
+            title="Borrar todo el historial"
+          >
+            <Trash2 size={16} />
+            Borrar
+          </button>
         </div>
       </div>
       <div style={{ overflowX: 'auto' }}>
