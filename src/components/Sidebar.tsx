@@ -14,30 +14,30 @@ const Sidebar: React.FC = () => {
       <nav className="sidebar-nav">
         <NavLink to="/" className={({ isActive }) => `nav-item interactive-element ${isActive ? 'active' : ''}`}>
           <LayoutDashboard className="nav-icon" size={20} />
-          <span className="text-body-md">Dashboard</span>
+          <span className="text-body-md">Inicio</span>
         </NavLink>
         <NavLink to="/inventory" className={({ isActive }) => `nav-item interactive-element ${isActive ? 'active' : ''}`}>
           <Box className="nav-icon" size={20} />
-          <span className="text-body-md">Inventory</span>
+          <span className="text-body-md">Inventario</span>
         </NavLink>
-        <NavLink to="/assignments" className={({ isActive }) => `nav-item interactive-element ${isActive ? 'active' : ''}`}>
+        <NavLink to="/personal" className={({ isActive }) => `nav-item interactive-element ${isActive ? 'active' : ''}`}>
           <UserCheck className="nav-icon" size={20} />
-          <span className="text-body-md">Assignments</span>
+          <span className="text-body-md">Personal</span>
         </NavLink>
         <NavLink to="/settings" className={({ isActive }) => `nav-item interactive-element ${isActive ? 'active' : ''}`}>
           <Settings className="nav-icon" size={20} />
-          <span className="text-body-md">Settings</span>
+          <span className="text-body-md">Configuración</span>
         </NavLink>
       </nav>
 
       <div className="sidebar-footer">
         <div className="footer-action interactive-element">
           <HelpCircle className="nav-icon" size={20} />
-          <span className="text-body-md">Support</span>
+          <span className="text-body-md">Soporte</span>
         </div>
         <div className="footer-action interactive-element">
           <LogOut className="nav-icon" size={20} />
-          <span className="text-body-md">Logout</span>
+          <span className="text-body-md">Cerrar Sesión</span>
         </div>
       </div>
     </aside>

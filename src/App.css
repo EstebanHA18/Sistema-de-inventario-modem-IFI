@@ -14,10 +14,11 @@
   transition: all var(--transition-normal);
 }
 
-.scrollable-area {
+.content-area {
   flex-grow: 1;
   padding: var(--space-lg);
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .content-wrapper {

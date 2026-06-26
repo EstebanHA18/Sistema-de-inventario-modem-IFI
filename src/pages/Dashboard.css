@@ -1,8 +1,10 @@
-/* Dashboard Layout Grid */
 .dashboard-grid {
   display: flex;
   flex-direction: column;
   gap: var(--space-xl);
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .summary-cards-container {
@@ -333,3 +335,9 @@
 .dot-assigned { background-color: var(--color-secondary); }
 .dot-stock { background-color: var(--color-tertiary-fixed-dim); }
 .dot-returned { background-color: var(--color-error); }
+
+.status-badge.out-of-stock {
+  background-color: rgba(255, 107, 107, 0.1);
+  border-color: rgba(255, 107, 107, 0.3);
+  color: var(--color-error);
+}

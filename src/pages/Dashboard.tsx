@@ -1,19 +1,28 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  TrendingUp, Package, UserPlus, AlertCircle, 
-  ClipboardCheck, Search, History, Filter, ExternalLink
+  Package, UserPlus, AlertCircle, 
+  ClipboardCheck, Search, History, DollarSign
 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 import './Dashboard.css';
 
-const SummaryCards = () => (
+interface DashboardStats {
+  totalStock: number;
+  assigned: number;
+  pendingCount: number;
+  pendingAmountNio: number;
+  pendingAmountUsd: number;
+}
+
+const SummaryCards = ({ stats }: { stats: DashboardStats }) => (
   <div className="summary-cards-container">
     <div className="dashboard-section summary-card interactive-card">
       <div>
-        <p className="text-caption text-on-surface-variant uppercase tracking-wider">Total Stock</p>
-        <h2 className="text-display" style={{ marginTop: 'var(--space-xs)' }}>1,284</h2>
+        <p className="text-caption text-on-surface-variant uppercase tracking-wider">Stock Total</p>
+        <h2 className="text-display" style={{ marginTop: 'var(--space-xs)' }}>{stats.totalStock}</h2>
         <div className="flex-center" style={{ gap: 'var(--space-xs)', marginTop: 'var(--space-xs)', color: 'var(--color-tertiary-fixed-dim)' }}>
-          <TrendingUp size={14} />
-          <span className="text-caption">+12% this week</span>
+          <Package size={14} />
+          <span className="text-caption">Unidades registradas</span>
         </div>
       </div>
       <div className="summary-card-icon">
@@ -23,11 +32,13 @@ const SummaryCards = () => (
 
     <div className="dashboard-section summary-card interactive-card">
       <div>
-        <p className="text-caption text-on-surface-variant uppercase tracking-wider">Assigned</p>
-        <h2 className="text-display" style={{ marginTop: 'var(--space-xs)' }}>842</h2>
+        <p className="text-caption text-on-surface-variant uppercase tracking-wider">Asignados</p>
+        <h2 className="text-display" style={{ marginTop: 'var(--space-xs)' }}>{stats.assigned}</h2>
         <div className="flex-center" style={{ gap: 'var(--space-xs)', marginTop: 'var(--space-xs)', color: 'var(--color-secondary)' }}>
-          <TrendingUp size={14} />
-          <span className="text-caption">65.5% Utilization</span>
+          <UserPlus size={14} />
+          <span className="text-caption">
+            {stats.totalStock > 0 ? ((stats.assigned / stats.totalStock) * 100).toFixed(1) : 0}% Uso
+          </span>
         </div>
       </div>
       <div className="summary-card-icon">
@@ -37,27 +48,111 @@ const SummaryCards = () => (
 
     <div className="dashboard-section summary-card interactive-card" style={{ borderColor: 'var(--color-error)' }}>
       <div>
-        <p className="text-caption text-on-surface-variant uppercase tracking-wider">Pending</p>
-        <h2 className="text-display" style={{ marginTop: 'var(--space-xs)' }}>42</h2>
+        <p className="text-caption text-on-surface-variant uppercase tracking-wider">Pendientes por Cancelar</p>
+        <h2 className="text-display" style={{ marginTop: 'var(--space-xs)' }}>{stats.pendingCount} <span style={{ fontSize: '14px', color: 'var(--color-on-surface-variant)' }}>uds</span></h2>
         <div className="flex-center" style={{ gap: 'var(--space-xs)', marginTop: 'var(--space-xs)', color: 'var(--color-error)' }}>
-          <AlertCircle size={14} />
-          <span className="text-caption">Needs Verification</span>
+          <DollarSign size={14} />
+          <span className="text-caption" style={{ fontWeight: 'bold' }}>
+            C$ {stats.pendingAmountNio.toFixed(2)} | $ {stats.pendingAmountUsd.toFixed(2)}
+          </span>
         </div>
       </div>
       <div className="summary-card-icon" style={{ color: 'var(--color-error)' }}>
-        <ClipboardCheck size={24} />
+        <AlertCircle size={24} />
       </div>
     </div>
   </div>
 );
 
-const AssignmentSection = () => {
-  const [selectedModem, setSelectedModem] = useState<string | null>(null);
+const AssignmentSection = ({ onAssigned }: { onAssigned: () => void }) => {
+  const [personnel, setPersonnel] = useState<any[]>([]);
+  const [selectedPersonId, setSelectedPersonId] = useState<string>('');
+  const [availableModems, setAvailableModems] = useState<any[]>([]);
+  const [selectedModems, setSelectedModems] = useState<any[]>([]);
+  const [modemSearch, setModemSearch] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  const modems = [
-    { sn: 'HW992384-B', model: 'HUAWEI 4G' },
-    { sn: 'ZT992410-A', model: 'ZTE MF296C' },
-  ];
+  useEffect(() => {
+    fetchPersonnel();
+    fetchAvailableModems();
+  }, []);
+
+  const fetchPersonnel = async () => {
+    const { data } = await supabase.from('personnel').select('*').order('name');
+    if (data) setPersonnel(data);
+  };
+
+  const fetchAvailableModems = async () => {
+    const { data } = await supabase
+      .from('inventory')
+      .select('*')
+      .eq('status', 'En Stock')
+      .order('created_at', { ascending: false });
+    if (data) setAvailableModems(data);
+  };
+
+  const handleProcessAssignment = async () => {
+    if (selectedModems.length === 0 || !selectedPersonId) {
+      alert('Por favor, selecciona un colaborador y al menos un módem.');
+      return;
+    }
+
+    const person = personnel.find(p => p.id === selectedPersonId);
+    if (!person) return;
+
+    setIsProcessing(true);
+    
+    // Process all modems
+    const ids = selectedModems.map(m => m.id);
+    
+    // 1. Update inventory
+    const { error: updateError } = await supabase
+      .from('inventory')
+      .update({ 
+        status: 'Asignado', 
+        assignment: person.name, 
+        assignment_date: new Date().toISOString().split('T')[0],
+        payment_status: 'Pendiente'
+      })
+      .in('id', ids);
+
+    if (updateError) {
+      console.error(updateError);
+      alert('Error al procesar la asignación');
+      setIsProcessing(false);
+      return;
+    }
+
+    // 2. Add to activity log for each modem
+    const logs = selectedModems.map(m => ({
+      action_type: 'Asignación',
+      serial_number: m.imei,
+      personnel_name: person.name,
+      details: `Asignado a ${person.name} en ${person.zone}`
+    }));
+    await supabase.from('activity_log').insert(logs);
+
+    alert(`¡Asignación exitosa de ${selectedModems.length} equipos!`);
+    setSelectedModems([]);
+    setSelectedPersonId('');
+    fetchAvailableModems();
+    onAssigned();
+    setIsProcessing(false);
+  };
+
+  const toggleSelection = (m: any) => {
+    if (selectedModems.some(x => x.id === m.id)) {
+      setSelectedModems(prev => prev.filter(x => x.id !== m.id));
+    } else {
+      setSelectedModems(prev => [...prev, m]);
+    }
+  };
+
+  const filteredModems = availableModems.filter(m => 
+    !modemSearch || 
+    m.imei.toLowerCase().includes(modemSearch.toLowerCase()) || 
+    m.brand.toLowerCase().includes(modemSearch.toLowerCase())
+  ).slice(0, 10); // Limit to 10 for performance
 
   return (
     <section className="dashboard-section assignment-section">
@@ -66,51 +161,78 @@ const AssignmentSection = () => {
           <ClipboardCheck size={24} />
           <h3 className="text-headline-md">Asignar Equipos</h3>
         </div>
-        <button className="btn-primary interactive-element">Procesar Asignación</button>
+        <button 
+          className="btn-primary interactive-element" 
+          onClick={handleProcessAssignment}
+          disabled={isProcessing}
+        >
+          {isProcessing ? 'Procesando...' : 'Procesar Asignación'}
+        </button>
       </div>
       <div className="section-body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
         
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-lg)' }}>
           <div className="form-group">
             <label className="text-caption form-label">Seleccione a quien asignar</label>
-            <div className="input-wrapper">
-              <Search className="input-icon" size={18} />
-              <input type="text" className="text-input with-icon text-body-md" placeholder="Buscar nombre de colaborador..." />
-            </div>
+            <select 
+              className="select-input text-body-md" 
+              value={selectedPersonId}
+              onChange={(e) => setSelectedPersonId(e.target.value)}
+            >
+              <option value="">-- Seleccionar Colaborador --</option>
+              {personnel.map(p => (
+                <option key={p.id} value={p.id}>{p.name} ({p.zone})</option>
+              ))}
+            </select>
           </div>
           
           <div className="form-group">
-            <label className="text-caption form-label">Zona de Asignación</label>
-            <select className="select-input text-body-md">
-              <option>Zona Occidente</option>
-            </select>
+            <label className="text-caption form-label">Buscador Rápido de Stock</label>
+            <div className="input-wrapper">
+              <Search className="input-icon" size={18} />
+              <input 
+                type="text" 
+                className="text-input with-icon text-body-md" 
+                placeholder="Filtrar por IMEI o Modelo..." 
+                value={modemSearch}
+                onChange={(e) => setModemSearch(e.target.value)}
+              />
+            </div>
           </div>
         </div>
 
         <div className="form-group">
-          <h4 className="text-caption form-label" style={{ marginBottom: 'var(--space-xs)' }}>Módems Disponibles (Selección)</h4>
+          <h4 className="text-caption form-label" style={{ marginBottom: 'var(--space-xs)' }}>Módems Disponibles (Últimos ingresados)</h4>
           <div className="modems-grid">
-            {modems.map(m => (
+            {filteredModems.length === 0 && (
+              <p className="text-body-md" style={{ color: 'var(--color-on-surface-variant)' }}>No hay módems disponibles o no coinciden con la búsqueda.</p>
+            )}
+            {filteredModems.map(m => {
+              const isSelected = selectedModems.some(x => x.id === m.id);
+              return (
               <div 
-                key={m.sn} 
-                className={`interactive-card modem-card ${selectedModem === m.sn ? 'selected' : ''}`}
-                onClick={() => setSelectedModem(m.sn)}
+                key={m.id} 
+                className={`interactive-card modem-card ${isSelected ? 'selected' : ''}`}
+                onClick={() => toggleSelection(m)}
               >
                 <div className="modem-info">
                   <input 
                     type="checkbox" 
                     className="modem-checkbox" 
-                    checked={selectedModem === m.sn}
+                    checked={isSelected}
                     readOnly
                   />
                   <div>
-                    <p className="text-headline-md" style={{ fontSize: '16px', fontWeight: 'bold' }}>{m.model}</p>
-                    <p className="text-label-mono" style={{ color: 'var(--color-on-surface-variant)', fontSize: '11px', marginTop: '4px' }}>SN: {m.sn}</p>
+                    <p className="text-headline-md" style={{ fontSize: '16px', fontWeight: 'bold' }}>{m.brand}</p>
+                    <p className="text-label-mono" style={{ color: 'var(--color-on-surface-variant)', fontSize: '11px', marginTop: '4px' }}>IMEI: {m.imei}</p>
                   </div>
                 </div>
-                <span className="status-badge in-stock">In Stock</span>
+                <span className="status-badge in-stock">
+                  Stock disponible
+                </span>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -119,69 +241,193 @@ const AssignmentSection = () => {
   );
 };
 
-const ActivityHistory = () => (
-  <section className="dashboard-section">
-    <div className="section-header">
-      <div className="section-title">
-        <History size={24} />
-        <h3 className="text-headline-md">Historial de Actividad Reciente</h3>
+const ActivityHistory = ({ triggerFetch }: { triggerFetch: number }) => {
+  const [history, setHistory] = useState<any[]>([]);
+  const [historySearch, setHistorySearch] = useState('');
+
+  useEffect(() => {
+    fetchHistory();
+  }, [triggerFetch]);
+
+  const fetchHistory = async () => {
+    const { data } = await supabase
+      .from('activity_log')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (data) setHistory(data);
+  };
+
+  const formatDate = (isoString: string) => {
+    const date = new Date(isoString);
+    return date.toLocaleString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+  };
+
+  const getDotClass = (action: string) => {
+    if (action.includes('Asignación')) return 'dot-assigned';
+    if (action.includes('Cancelado')) return 'dot-stock'; // green
+    if (action.includes('Devolución')) return 'dot-returned'; // red
+    return 'dot-stock';
+  };
+
+  const filteredHistory = history.filter(row => {
+    if (!historySearch) return true;
+    const term = historySearch.toLowerCase();
+    return (
+      row.action_type.toLowerCase().includes(term) ||
+      row.serial_number.toLowerCase().includes(term) ||
+      (row.personnel_name && row.personnel_name.toLowerCase().includes(term))
+    );
+  });
+
+  return (
+    <section className="dashboard-section">
+      <div className="section-header">
+        <div className="section-title">
+          <History size={24} />
+          <h3 className="text-headline-md">Historial de Actividad Reciente</h3>
+        </div>
+        <div className="input-wrapper" style={{ width: '250px' }}>
+          <Search className="input-icon" size={16} />
+          <input 
+            type="text" 
+            className="text-input with-icon text-caption" 
+            placeholder="Filtrar historial..." 
+            value={historySearch}
+            onChange={(e) => setHistorySearch(e.target.value)}
+            style={{ padding: '6px 12px 6px 36px' }}
+          />
+        </div>
       </div>
-      <button className="flex-center interactive-element" style={{ gap: 'var(--space-xs)', background: 'none', border: 'none', color: 'var(--color-on-surface-variant)', cursor: 'pointer' }}>
-        <Filter size={18} />
-        <span className="text-body-md">Filtrar</span>
-      </button>
-    </div>
-    <div style={{ overflowX: 'auto' }}>
-      <table className="history-table">
-        <thead>
-          <tr>
-            <th className="text-caption">Fecha / Hora</th>
-            <th className="text-caption">Serial Number</th>
-            <th className="text-caption">Colaborador / Cliente</th>
-            <th className="text-caption">Estado</th>
-            <th className="text-caption">Acción</th>
-          </tr>
-        </thead>
-        <tbody>
-          {[
-            { date: '14 Oct 2023, 10:24 AM', sn: 'TX992384-B', user: 'Roberto Jimenez', state: 'Asignado', dot: 'dot-assigned' },
-            { date: '14 Oct 2023, 09:15 AM', sn: 'SA551221-M', user: 'Inventario General', state: 'Stock', dot: 'dot-stock' },
-            { date: '13 Oct 2023, 04:50 PM', sn: 'TX911200-X', user: 'María Fernanda Ruiz', state: 'Asignado', dot: 'dot-assigned' },
-            { date: '13 Oct 2023, 02:30 PM', sn: 'S6128899-K', user: 'Daniel Castro', state: 'Devuelto', dot: 'dot-returned', stateColor: 'var(--color-error)' },
-          ].map((row, i) => (
-            <tr key={i} className="history-row">
-              <td className="text-body-md" style={{ color: 'var(--color-on-surface)' }}>{row.date}</td>
-              <td className="text-label-mono" style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>SN: {row.sn}</td>
-              <td className="text-body-md" style={{ color: 'var(--color-on-surface-variant)' }}>{row.user}</td>
-              <td>
-                <div className="status-dot-wrapper">
-                  <div className={`status-dot ${row.dot}`}></div>
-                  <span className="text-caption" style={{ textTransform: 'uppercase', fontWeight: 'bold', color: row.stateColor || 'inherit' }}>{row.state}</span>
-                </div>
-              </td>
-              <td>
-                <button className="action-btn">
-                  <ExternalLink size={18} />
-                </button>
-              </td>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="history-table">
+          <thead>
+            <tr>
+              <th className="text-caption">Fecha / Hora</th>
+              <th className="text-caption">Número de Serie (IMEI)</th>
+              <th className="text-caption">Colaborador / Cliente</th>
+              <th className="text-caption">Acción Realizada</th>
+              <th className="text-caption">Detalles</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  </section>
-);
+          </thead>
+          <tbody>
+            {filteredHistory.length === 0 && (
+              <tr>
+                <td colSpan={5} style={{ textAlign: 'center', padding: 'var(--space-md)', color: 'var(--color-on-surface-variant)' }}>
+                  Aún no hay actividad registrada o no coincide con el filtro.
+                </td>
+              </tr>
+            )}
+            {filteredHistory.map((row) => (
+              <tr key={row.id} className="history-row">
+                <td className="text-body-md" style={{ color: 'var(--color-on-surface)' }}>{formatDate(row.created_at)}</td>
+                <td className="text-label-mono" style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>{row.serial_number}</td>
+                <td className="text-body-md" style={{ color: 'var(--color-on-surface-variant)' }}>{row.personnel_name}</td>
+                <td>
+                  <div className="status-dot-wrapper">
+                    <div className={`status-dot ${getDotClass(row.action_type)}`}></div>
+                    <span className="text-caption" style={{ textTransform: 'uppercase', fontWeight: 'bold', color: row.action_type.includes('Cancelado') ? 'var(--color-tertiary-fixed-dim)' : 'inherit' }}>
+                      {row.action_type}
+                    </span>
+                  </div>
+                </td>
+                <td className="text-caption" style={{ color: 'var(--color-on-surface-variant)' }}>
+                  {row.details}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+};
 
 const Dashboard: React.FC = () => {
+  const [stats, setStats] = useState<DashboardStats>({
+    totalStock: 0,
+    assigned: 0,
+    pendingCount: 0,
+    pendingAmountNio: 0,
+    pendingAmountUsd: 0
+  });
+  
+  // Trigger to reload components when an assignment happens
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  useEffect(() => {
+    fetchStats();
+    
+    // Listen for the custom event from the global search bar
+    const handleGlobalUpdate = () => refresh();
+    window.addEventListener('inventory-updated', handleGlobalUpdate);
+    return () => window.removeEventListener('inventory-updated', handleGlobalUpdate);
+  }, [refreshTrigger]);
+
+  const refresh = () => setRefreshTrigger(prev => prev + 1);
+
+  const fetchStats = async () => {
+    // 1. Get all inventory to count
+    const { data: invData } = await supabase.from('inventory').select('*');
+    if (!invData) return;
+
+    // 2. Get equipment models to get prices
+    const { data: modelsData } = await supabase.from('equipment_models').select('*');
+    const modelMap = new Map();
+    if (modelsData) {
+      modelsData.forEach(m => {
+        // Because brand_model is like "HUAWEI (HW992384-B)" we might need to match on brand
+        // We do a simple fallback mapping
+        modelMap.set(m.brand_model, m);
+      });
+    }
+
+    let total = invData.length;
+    let assigned = 0;
+    let pendingC = 0;
+    let nio = 0;
+    let usd = 0;
+
+    invData.forEach(item => {
+      const isLegacyAssigned = item.status === 'Asignado' && !item.payment_status;
+      const isPending = item.payment_status === 'Pendiente' || isLegacyAssigned;
+      const isCancelled = item.payment_status === 'Cancelado';
+
+      if (isCancelled) {
+        total--;
+      } else {
+        if (item.status === 'Asignado') assigned++;
+      }
+
+      if (isPending) {
+        pendingC++;
+        // Find price. We search models that include the item.brand string
+        const model = modelsData?.find(m => m.brand_model.includes(item.brand));
+        if (model) {
+          nio += model.price_nio || 0;
+          usd += model.price_usd || 0;
+        }
+      }
+    });
+
+    setStats({
+      totalStock: total,
+      assigned: assigned,
+      pendingCount: pendingC,
+      pendingAmountNio: nio,
+      pendingAmountUsd: usd
+    });
+  };
+
   return (
     <div className="dashboard-grid">
-      <SummaryCards />
+      <SummaryCards stats={stats} />
       
       <div className="dashboard-main-sections">
-        <AssignmentSection />
+        <AssignmentSection onAssigned={refresh} />
       </div>
 
-      <ActivityHistory />
+      <ActivityHistory triggerFetch={refreshTrigger} />
     </div>
   );
 };

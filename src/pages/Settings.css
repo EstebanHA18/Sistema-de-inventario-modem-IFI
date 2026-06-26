@@ -1,0 +1,65 @@
+.settings-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.settings-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+}
+
+.settings-section {
+  background-color: var(--color-surface-container-low);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.models-table-container {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.models-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.models-table th {
+  padding: var(--space-md) var(--space-lg);
+  color: var(--color-on-surface-variant);
+  text-transform: uppercase;
+  font-weight: 500;
+  border-bottom: 1px solid var(--color-outline-variant);
+  background-color: var(--color-surface-container-lowest);
+}
+
+.models-table td {
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid rgba(63, 63, 70, 0.3);
+}
+
+.models-table tbody tr {
+  transition: all var(--transition-fast);
+}
+.models-table tbody tr:hover {
+  background-color: var(--color-surface-container);
+}
+
+/* Modals inputs with prefix */
+.input-prefix {
+  position: absolute;
+  left: var(--space-md);
+  color: var(--color-on-surface-variant);
+  font-weight: bold;
+}
+
+.text-input.with-prefix {
+  padding-left: 40px;
+}
